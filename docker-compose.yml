@@ -1,0 +1,101 @@
+version: '3'
+
+services:
+  #Application Service
+  app:
+    build:
+      args:
+        user: panev
+        uid: 1000
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: php
+    restart: "no"
+    tty: true
+    environment:
+      SERVICE_NAME: app
+      SERVICE_TAGS: dev
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      - app-network
+  #Web Server Service
+  webserver:
+    image: nginx:alpine
+    restart: "no"
+    tty: true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - app-network
+  #DB Service
+  mysql:
+    image: mysql
+    command:
+      - "--default-authentication-plugin=mysql_native_password"
+      - '--character-set-server=utf8'
+    restart: "no"
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - ./docker/mysql/.data/db:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - app-network
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    depends_on:
+      - mysql
+    environment:
+      - PMA_ARBITRARY=1
+    ports:
+      - 8080:80
+    volumes:
+      - ./docker/logs/sessions:/sessions
+    networks:
+      - app-network
+  nodejs:
+    image: node:13
+    user: node
+    working_dir: /home/node/app
+    environment:
+      - NODE_ENV=dev
+    expose:
+      - 8083
+    volumes:
+      - ./:/home/node/app
+    networks:
+      - app-network
+  composer:
+    image: composer
+    networks:
+      - app-network
+    ports:
+      - "9001:9000"
+    volumes:
+      - .:/app
+    command: install
+
+#Docker Networks
+networks:
+  app-network:
+    driver: bridge
+
+#Volumes
+volumes:
+  dbdata:
+    driver: local
